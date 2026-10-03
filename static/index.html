@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HanoiRoomAI - Dark Mode</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Config Tailwind for Dark Mode aesthetics -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        fuobg: '#0f172a', /* slate-900 */
+                        fuopanel: '#1e293b', /* slate-800 */
+                        fuoborder: '#334155', /* slate-700 */
+                        fuohover: '#293548',
+                        fuoaccent: '#3b82f6', /* blue-500 */
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #cbd5e1; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .dark-panel { 
+            background: #1e293b; 
+            border-radius: 8px; 
+            border: 1px solid #334155; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2); 
+            transition: all 0.2s ease;
+        }
+        .dark-panel:hover {
+            border-color: #475569;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+        }
+        
+        #map { height: 260px; width: 100%; border-radius: 6px; z-index: 1; }
+        
+        /* Custom scrollbar for a sleek look */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-fuopanel border-b border-fuoborder sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <!-- Logo -->
+                <div class="flex items-center gap-3">
+                    <div class="bg-slate-700 p-2 rounded-lg text-fuoaccent">
+                        <i class="fa-solid fa-code-branch"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg text-white tracking-wide">HanoiRoom<span class="text-fuoaccent">AI</span></h1>
+                    </div>
+                </div>
+                
+                <!-- Nav -->
+                <nav class="flex space-x-2">
+                    <button onclick="switchTab('predict')" id="btn-predict" class="px-4 py-2 rounded-md text-sm font-medium bg-slate-700 text-white border border-slate-600 transition-colors flex items-center gap-2">
+                        <i class="fa-solid fa-calculator text-fuoaccent"></i> Dự đoán
+                    </button>
+                    <button onclick="switchTab('dashboard')" id="btn-dashboard" class="px-4 py-2 rounded-md text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-700 border border-transparent transition-colors flex items-center gap-2">
+                        <i class="fa-solid fa-chart-line text-emerald-500"></i> Báo cáo
+                    </button>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+
+        <!-- TAB 1: PREDICT -->
+        <div id="tab-predict" class="tab-content active">
+            
+            <div class="mb-6">
+                <h2 class="text-2xl font-semibold text-white flex items-center gap-2">
+                    <i class="fa-regular fa-folder-open text-slate-400"></i> KHU VỰC ĐỊNH GIÁ
+                </h2>
+                <p class="text-sm text-slate-400 mt-1">Các hoạt động tính toán và dự báo từ hệ thống AI.</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                <!-- COL 1: Input Form -->
+                <div class="dark-panel p-6">
+                    <div class="flex items-center gap-3 border-b border-fuoborder pb-3 mb-5">
+                        <i class="fa-solid fa-sliders text-yellow-500 text-xl"></i>
+                        <div>
+                            <h2 class="text-white font-semibold">Thông Số Phòng</h2>
+                            <p class="text-xs text-slate-400">Nhập thông tin vật lý của căn phòng</p>
+                        </div>
+                    </div>
+                    
+                    <form id="priceForm" class="space-y-5">
+                        
+                        <!-- Area & Type -->
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Diện tích (m²)</label>
+                                <input type="number" id="area" required min="10" max="200" value="25" class="w-full px-3 py-2 bg-fuobg border border-fuoborder rounded text-white focus:border-fuoaccent focus:ring-1 focus:ring-fuoaccent outline-none transition-colors">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Loại hình</label>
+                                <select id="property_type" class="w-full px-3 py-2 bg-fuobg border border-fuoborder rounded text-white focus:border-fuoaccent focus:ring-1 focus:ring-fuoaccent outline-none appearance-none transition-colors">
+                                    <option value="Phòng trọ">Phòng trọ</option>
+                                    <option value="Chung cư mini">Chung cư mini</option>
+                                    <option value="Căn hộ dịch vụ">Căn hộ dịch vụ</option>
+                                    <option value="Nhà nguyên căn">Nhà nguyên căn</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Amenities -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 mt-2">Tiện nghi cơ bản</label>
+                            <div class="grid grid-cols-2 gap-3">
+                                <label class="flex items-center space-x-2 text-sm cursor-pointer group">
+                                    <input type="checkbox" id="has_private_bathroom" checked class="w-4 h-4 rounded bg-fuobg border-fuoborder text-fuoaccent focus:ring-fuoaccent focus:ring-offset-fuopanel">
+                                    <span class="text-slate-300 group-hover:text-white transition-colors">WC khép kín</span>
+                                </label>
+                                <label class="flex items-center space-x-2 text-sm cursor-pointer group">
+                                    <input type="checkbox" id="is_furnished" checked class="w-4 h-4 rounded bg-fuobg border-fuoborder text-fuoaccent focus:ring-fuoaccent focus:ring-offset-fuopanel">
+                                    <span class="text-slate-300 group-hover:text-white transition-colors">Đủ nội thất</span>
+                                </label>
+                                <label class="flex items-center space-x-2 text-sm cursor-pointer group">
+                                    <input type="checkbox" id="has_private_entrance" checked class="w-4 h-4 rounded bg-fuobg border-fuoborder text-fuoaccent focus:ring-fuoaccent focus:ring-offset-fuopanel">
+                                    <span class="text-slate-300 group-hover:text-white transition-colors">Lối đi riêng</span>
+                                </label>
+                                <label class="flex items-center space-x-2 text-sm cursor-pointer group">
+                                    <input type="checkbox" id="living_with_owner" class="w-4 h-4 rounded bg-fuobg border-fuoborder text-red-500 focus:ring-red-500 focus:ring-offset-fuopanel">
+                                    <span class="text-slate-400 group-hover:text-red-400 transition-colors">Chung chủ</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Location -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 mt-4">Vị trí địa lý</label>
+                            <div class="space-y-3">
+                                <input type="text" id="address" placeholder="Tùy chọn: Số nhà, Tên đường..." class="w-full px-3 py-2 bg-fuobg border border-fuoborder rounded text-white focus:border-fuoaccent focus:ring-1 focus:ring-fuoaccent outline-none transition-colors">
+                                
+                                <select id="district" class="w-full px-3 py-2 bg-fuobg border border-fuoborder rounded text-white focus:border-fuoaccent focus:ring-1 focus:ring-fuoaccent outline-none appearance-none transition-colors">
+                                    <option value="Ba Đình, Hà Nội">Ba Đình</option>
+                                    <option value="Bắc Từ Liêm, Hà Nội">Bắc Từ Liêm</option>
+                                    <option value="Chương Mỹ, Hà Nội">Chương Mỹ</option>
+                                    <option value="Cầu Giấy, Hà Nội" selected>Cầu Giấy</option>
+                                    <option value="Gia Lâm, Hà Nội">Gia Lâm</option>
+                                    <option value="Hai Bà Trưng, Hà Nội">Hai Bà Trưng</option>
+                                    <option value="Hoài Đức, Hà Nội">Hoài Đức</option>
+                                    <option value="Hoàn Kiếm, Hà Nội">Hoàn Kiếm</option>
+                                    <option value="Hoàng Mai, Hà Nội">Hoàng Mai</option>
+                                    <option value="Hà Đông, Hà Nội">Hà Đông</option>
+                                    <option value="Long Biên, Hà Nội">Long Biên</option>
+                                    <option value="Mê Linh, Hà Nội">Mê Linh</option>
+                                    <option value="Nam Từ Liêm, Hà Nội">Nam Từ Liêm</option>
+                                    <option value="Phú Xuyên, Hà Nội">Phú Xuyên</option>
+                                    <option value="Quốc Oai, Hà Nội">Quốc Oai</option>
+                                    <option value="Sóc Sơn, Hà Nội">Sóc Sơn</option>
+                                    <option value="Thanh Trì, Hà Nội">Thanh Trì</option>
+                                    <option value="Thanh Xuân, Hà Nội">Thanh Xuân</option>
+                                    <option value="Thường Tín, Hà Nội">Thường Tín</option>
+                                    <option value="Thạch Thất, Hà Nội">Thạch Thất</option>
+                                    <option value="Tây Hồ, Hà Nội">Tây Hồ</option>
+                                    <option value="Đan Phượng, Hà Nội">Đan Phượng</option>
+                                    <option value="Đông Anh, Hà Nội">Đông Anh</option>
+                                    <option value="Đống Đa, Hà Nội">Đống Đa</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="w-full bg-fuoaccent hover:bg-blue-600 text-white font-medium py-2.5 rounded shadow transition-colors mt-2 text-sm tracking-wide">
+                            THỰC THI DỰ ĐOÁN
+                        </button>
+                    </form>
+                </div>
+
+                <!-- COL 2: Location Map & External Info -->
+                <div class="dark-panel p-6 flex flex-col">
+                    <div class="flex items-center gap-3 border-b border-fuoborder pb-3 mb-5">
+                        <i class="fa-solid fa-map text-emerald-500 text-xl"></i>
+                        <div>
+                            <h2 class="text-white font-semibold">Bản Đồ Không Gian</h2>
+                            <p class="text-xs text-slate-400">Hệ thống quét vệ tinh bán kính 500m</p>
+                        </div>
+                    </div>
+                    
+                    <div id="map" class="mb-5 bg-fuobg border border-fuoborder relative"></div>
+
+                    <div class="bg-fuobg rounded p-4 border border-fuoborder flex-grow">
+                        <div class="space-y-4 text-sm">
+                            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                                <span class="text-slate-400"><i class="fa-solid fa-layer-group text-slate-500 w-5"></i> Mật độ phòng</span>
+                                <span class="font-medium text-white" id="info-density">-- / 500m</span>
+                            </div>
+                            <div class="flex justify-between items-center pb-1">
+                                <span class="text-slate-400"><i class="fa-solid fa-tags text-slate-500 w-5"></i> Giá trung vị</span>
+                                <span class="font-medium text-white" id="info-med-price">-- Triệu</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COL 3: Prediction & Explainability -->
+                <div class="flex flex-col gap-6">
+                    
+                    <!-- Prediction Card -->
+                    <div class="dark-panel p-6 border-l-4 border-l-fuoaccent">
+                        <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">MỨC GIÁ DỰ BÁO</h2>
+                        
+                        <div id="loading" class="hidden py-4 text-center">
+                            <i class="fa-solid fa-circle-notch fa-spin text-2xl text-fuoaccent"></i>
+                        </div>
+                        
+                        <div id="result-box">
+                            <div class="flex items-end gap-2 mb-2">
+                                <span class="text-4xl font-bold text-white" id="out-price">--</span>
+                                <span class="text-sm text-slate-400 pb-1">VNĐ / tháng</span>
+                            </div>
+                            <div class="text-xs text-slate-400 mt-2">
+                                <i class="fa-solid fa-bullseye text-slate-500 mr-1"></i> Tham chiếu: <span id="out-range" class="text-slate-300">--</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Explainability -->
+                    <div class="dark-panel p-6 flex-grow">
+                        <div class="flex items-center gap-3 border-b border-fuoborder pb-3 mb-4">
+                            <i class="fa-solid fa-shield-halved text-blue-400 text-xl"></i>
+                            <div>
+                                <h2 class="text-white font-semibold">Phân Tích Tác Động</h2>
+                            </div>
+                        </div>
+                        
+                        <div id="explain-box" class="space-y-4 text-xs text-slate-500 text-center py-4">
+                            Hệ thống đang chờ lệnh thực thi.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: MODEL DASHBOARD -->
+        <div id="tab-dashboard" class="tab-content">
+            <div class="mb-6">
+                <h2 class="text-2xl font-semibold text-white flex items-center gap-2">
+                    <i class="fa-regular fa-folder-open text-slate-400"></i> KHU VỰC BÁO CÁO (EDA)
+                </h2>
+                <p class="text-sm text-slate-400 mt-1">Các thống kê dữ liệu hệ thống học máy.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Plots -->
+                <div class="dark-panel p-4">
+                    <h3 class="font-medium text-center mb-3 text-slate-300 text-sm uppercase tracking-wide">Phân phối giá</h3>
+                    <img src="/plots/1_price_distribution.png" class="w-full rounded border border-fuoborder opacity-90 hover:opacity-100 transition-opacity" alt="Plot">
+                </div>
+                <div class="dark-panel p-4">
+                    <h3 class="font-medium text-center mb-3 text-slate-300 text-sm uppercase tracking-wide">Mức giá theo Quận</h3>
+                    <img src="/plots/2_price_by_district_boxplot.png" class="w-full rounded border border-fuoborder opacity-90 hover:opacity-100 transition-opacity" alt="Plot">
+                </div>
+                <div class="dark-panel p-4">
+                    <h3 class="font-medium text-center mb-3 text-slate-300 text-sm uppercase tracking-wide">Ma trận Tương quan</h3>
+                    <img src="/plots/3_feature_correlation.png" class="w-full rounded border border-fuoborder opacity-90 hover:opacity-100 transition-opacity" alt="Plot">
+                </div>
+                <div class="dark-panel p-4">
+                    <h3 class="font-medium text-center mb-3 text-slate-300 text-sm uppercase tracking-wide">Trọng số Đặc trưng</h3>
+                    <img src="/plots/4_feature_importance.png" class="w-full rounded border border-fuoborder opacity-90 hover:opacity-100 transition-opacity" alt="Plot">
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Tab logic
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.getElementById('tab-' + tabId).classList.add('active');
+            
+            let inactiveCls = "px-4 py-2 rounded-md text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-700 border border-transparent transition-colors flex items-center gap-2";
+            let activeCls = "px-4 py-2 rounded-md text-sm font-medium bg-slate-700 text-white border border-slate-600 transition-colors flex items-center gap-2";
+
+            document.getElementById('btn-predict').className = inactiveCls;
+            document.getElementById('btn-dashboard').className = inactiveCls;
+            
+            document.getElementById('btn-' + tabId).className = activeCls;
+            
+            if (tabId === 'predict' && map) {
+                setTimeout(() => map.invalidateSize(), 100);
+            }
+        }
+
+        // Map initialization - Using OSM Tiles with CSS Dark Mode filter
+        let map = L.map('map').setView([21.0285, 105.8542], 12);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap',
+            maxZoom: 19
+        }).addTo(map);
+        
+        // Dark Mode CSS Filter for OSM map
+        const style = document.createElement('style');
+        style.innerHTML = '.leaflet-tile-pane { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }';
+        document.head.appendChild(style);
+        
+        setTimeout(() => map.invalidateSize(), 500);
+
+        let marker = null;
+        let circle = null;
+
+        // Custom Leaflet icon for dark theme
+        var darkIcon = L.divIcon({
+            className: 'custom-div-icon',
+            html: "<i class='fa-solid fa-location-dot text-fuoaccent text-2xl drop-shadow-md'></i>",
+            iconSize: [24, 24],
+            iconAnchor: [12, 24]
+        });
+
+        // Form submission
+        document.getElementById('priceForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            document.getElementById('result-box').classList.add('hidden');
+            document.getElementById('loading').classList.remove('hidden');
+
+            const payload = {
+                address: document.getElementById('address').value,
+                district: document.getElementById('district').value,
+                property_type: document.getElementById('property_type').value,
+                area: parseFloat(document.getElementById('area').value),
+                has_private_bathroom: document.getElementById('has_private_bathroom').checked,
+                has_private_entrance: document.getElementById('has_private_entrance').checked,
+                is_furnished: document.getElementById('is_furnished').checked,
+                living_with_owner: document.getElementById('living_with_owner').checked
+            };
+
+            try {
+                const response = await fetch('/api/predict', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.detail || "Lỗi Server API");
+                }
+                
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('result-box').classList.remove('hidden');
+                
+                // Update text
+                document.getElementById('out-price').innerText = data.predicted_price.toFixed(2) + "M";
+                document.getElementById('out-range').innerText = `${data.range_min}M - ${data.range_max}M`;
+                
+                // Update map & info
+                if (data.geo_debug.lat && data.geo_debug.lon) {
+                    const lat = data.geo_debug.lat;
+                    const lon = data.geo_debug.lon;
+                    
+                    map.setView([lat, lon], 15);
+                    
+                    if (marker) map.removeLayer(marker);
+                    if (circle) map.removeLayer(circle);
+                    
+                    marker = L.marker([lat, lon], {icon: darkIcon}).addTo(map)
+                        .bindPopup("<b style='color:#0f172a'>Tọa độ giả định</b><br/>Đây là vị trí mô phỏng để tính giá.").openPopup();
+                    
+                    circle = L.circle([lat, lon], {
+                        color: '#3b82f6',
+                        fillColor: '#3b82f6',
+                        fillOpacity: 0.15,
+                        weight: 1,
+                        radius: 500
+                    }).addTo(map);
+
+                    document.getElementById('info-density').innerText = `${data.geo_debug.neighbors} phòng`;
+                    document.getElementById('info-med-price').innerText = `${data.geo_debug.med_price} Triệu`;
+                } else {
+                    document.getElementById('info-density').innerText = `Không định vị được`;
+                    document.getElementById('info-med-price').innerText = `-- Triệu`;
+                }
+                
+                // Update explainability
+                const expBox = document.getElementById('explain-box');
+                expBox.innerHTML = '';
+                expBox.classList.remove('text-center', 'text-slate-500');
+                
+                data.explanation.forEach(item => {
+                    let color = item.impact.includes('-') ? 'bg-red-500/80' : 'bg-fuoaccent/80';
+                    let textCol = item.impact.includes('-') ? 'text-red-400' : 'text-blue-400';
+                    let width = "w-2/5";
+                    if(item.impact === "++") width = "w-4/5";
+                    if(item.impact.includes("Giá tham chiếu")) width = "w-full bg-slate-500";
+
+                    let html = `
+                        <div class="flex flex-col mb-3">
+                            <div class="flex justify-between text-xs mb-1.5">
+                                <span class="text-slate-300">${item.factor}</span>
+                                <span class="${textCol} font-medium tracking-wide">${item.impact}</span>
+                            </div>
+                            <div class="w-full bg-fuobg rounded-full h-1 border border-fuoborder overflow-hidden">
+                                <div class="${color} h-1 rounded-full ${width} shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
+                            </div>
+                        </div>
+                    `;
+                    expBox.innerHTML += html;
+                });
+
+            } catch (err) {
+                console.error(err);
+                alert(err.message || "Đã xảy ra lỗi kết nối API.");
+                document.getElementById('loading').classList.add('hidden');
+                // Ensure result box stays hidden to prevent showing stale data
+                document.getElementById('result-box').classList.add('hidden');
+                document.getElementById('explain-box').innerHTML = `<span class="text-red-400 font-semibold">${err.message || "Lỗi xử lý hệ thống"}</span>`;
+            }
+        });
+    </script>
+</body>
+</html>
